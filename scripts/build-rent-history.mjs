@@ -139,6 +139,32 @@ async function main() {
 
   counties.sort((a, b) => a.fips.localeCompare(b.fips));
 
+  let previous = null;
+  try {
+    previous = JSON.parse(await readFile(OUT, 'utf8'));
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+
+  if (previous) {
+    // Never let a refresh move the dataset backwards in time.
+    if (previous.lastMonth && previous.lastMonth > months.at(-1)) {
+      fail(`refusing to overwrite ${previous.lastMonth} history with older ${months.at(-1)} data`);
+    }
+
+    // Nothing material changed, so leave the file untouched. `fetchedAt` alone
+    // would otherwise rewrite the file on every poll, and each scheduled run
+    // would land a commit — and a full site redeploy — whose only content is a
+    // new timestamp. Same guard as fetch-rents.mjs and fetch-county-rents.mjs.
+    if (
+      previous.lastMonth === months.at(-1) &&
+      JSON.stringify(previous.counties) === JSON.stringify(counties)
+    ) {
+      console.log(`\n  already current at ${months.at(-1)} — leaving data/rent-history.json untouched`);
+      return;
+    }
+  }
+
   const payload = {
     source: SOURCE,
     method:
