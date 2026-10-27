@@ -1,0 +1,90 @@
+<!doctype html>
+<!--
+  Tableau Web Data Connector for the county rent dataset.
+
+  In Tableau Desktop / Tableau Public: Connect -> Web Data Connector, then
+  enter this file's published URL:
+
+    https://affordability-index.varadmore.me/assets/tableau-wdc.html
+
+  (or a locally served copy — file:// does not work, Tableau needs http).
+  It feeds one table, one row per county: FIPS, county, state, metro, current
+  rent, year-over-year change, and the as-of date, straight from the same
+  data/county-rents.json the site itself renders. FIPS is a string on purpose:
+  Tableau's geographic role for US counties matches on it, so the viz is one
+  drag onto a filled map.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Affordability Index — Tableau connector</title>
+  <script src="https://connectors.tableau.com/libs/tableauwdc-2.3.latest.js"></script>
+  <script>
+    (function () {
+      var connector = tableau.makeConnector();
+
+      connector.getSchema = function (schemaCallback) {
+        schemaCallback([{
+          id: 'county_rents',
+          alias: 'County rents (Zillow ZORI)',
+          columns: [
+            { id: 'fips',  dataType: tableau.dataTypeEnum.string, alias: 'County FIPS' },
+            { id: 'county', dataType: tableau.dataTypeEnum.string, alias: 'County' },
+            { id: 'state', dataType: tableau.dataTypeEnum.string, alias: 'State' },
+            { id: 'metro', dataType: tableau.dataTypeEnum.string, alias: 'Metro' },
+            { id: 'rent',  dataType: tableau.dataTypeEnum.int,    alias: 'Rent ($/mo)' },
+            { id: 'yoy',   dataType: tableau.dataTypeEnum.float,  alias: 'Rent YoY' },
+            { id: 'as_of', dataType: tableau.dataTypeEnum.date,   alias: 'As of' },
+          ],
+        }]);
+      };
+
+      connector.getData = function (table, doneCallback) {
+        fetch('../data/county-rents.json')
+          .then(function (res) {
+            if (!res.ok) throw new Error('county-rents.json: HTTP ' + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            table.appendRows(data.counties.map(function (c) {
+              return {
+                fips: c.fips,
+                county: c.name,
+                state: c.state,
+                metro: c.metro || null,
+                rent: c.rent,
+                yoy: c.yoy,
+                as_of: data.asOf,
+              };
+            }));
+            doneCallback();
+          })
+          .catch(function (err) {
+            tableau.abortWithError(String(err));
+          });
+      };
+
+      tableau.registerConnector(connector);
+
+      document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('connect').addEventListener('click', function () {
+          tableau.connectionName = 'Affordability Index — county rents';
+          tableau.submit();
+        });
+      });
+    })();
+  </script>
+</head>
+<body>
+  <h1>Affordability Index — county rents</h1>
+  <p>
+    One row per US county: current Zillow ZORI rent, year-over-year change,
+    and the FIPS code (map it with Tableau's County geographic role).
+  </p>
+  <button id="connect" type="button">Load into Tableau</button>
+  <p><small>
+    Open this page inside Tableau's Web Data Connector dialog — in a normal
+    browser the button does nothing.
+  </small></p>
+</body>
+</html>
