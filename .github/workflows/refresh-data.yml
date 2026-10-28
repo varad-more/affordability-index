@@ -55,15 +55,25 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      - name: Verify the engine still agrees with the new data
+      # The parity fixture embeds the rents its cases were built from, so fresh
+      # data makes Python disagree with the committed fixture and pytest fails —
+      # which silently killed every scheduled refresh once the rents first moved.
+      # Regenerating here is safe: the browser suite recomputes from the inputs
+      # recorded *in* the fixture, so both sides stay consistent by construction,
+      # and the code contract is still guarded because no code changed in this
+      # run. A refresh where nothing moved regenerates an identical file.
+      - name: Regenerate the parity fixture against the new data
         run: |
           pip install -r requirements.txt -r requirements-dev.txt
-          python -m pytest tests/ -q
+          python scripts/make_parity_fixture.py
+
+      - name: Verify the engine still agrees with the new data
+        run: python -m pytest tests/ -q
 
       - name: Commit if the data moved
         id: commit
         run: |
-          FILES="data/rents.json data/county-rents.json data/rent-history.json"
+          FILES="data/rents.json data/county-rents.json data/rent-history.json e2e/fixtures/derivation.json"
           if git diff --quiet -- $FILES; then
             echo "No change in rent data."
             echo "changed=false" >> "$GITHUB_OUTPUT"
